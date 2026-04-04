@@ -68,23 +68,28 @@ export function createSTTRecorder(targetSampleRate = 16000): RecorderController 
   let audioCtx: AudioContext | null = null
   let source: MediaStreamAudioSourceNode | null = null
   let processor: ScriptProcessorNode | null = null
+  let sink: GainNode | null = null
   let recording = false
   const chunks: Float32Array[] = []
   let length = 0
 
   async function start() {
     if (recording) return
-    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } as any })
     audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)()
+    try { await (audioCtx as any).resume?.() } catch {}
     source = audioCtx.createMediaStreamSource(mediaStream)
-    processor = audioCtx.createScriptProcessor(4096, 1, 1)
+    processor = audioCtx.createScriptProcessor(2048, 1, 1)
     processor.onaudioprocess = (e) => {
       const data = e.inputBuffer.getChannelData(0)
       chunks.push(new Float32Array(data))
       length += data.length
     }
     source.connect(processor)
-    processor.connect(audioCtx.destination)
+    sink = audioCtx.createGain()
+    sink.gain.value = 0
+    processor.connect(sink)
+    sink.connect(audioCtx.destination)
     recording = true
   }
 
@@ -93,6 +98,7 @@ export function createSTTRecorder(targetSampleRate = 16000): RecorderController 
     recording = false
     processor?.disconnect()
     source?.disconnect()
+    sink?.disconnect()
     mediaStream?.getTracks().forEach((t) => t.stop())
     const inputRate = audioCtx?.sampleRate ?? 48000
     audioCtx?.close()

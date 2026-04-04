@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Scene, ConversationMessage } from '../types'
 import MicrophoneButton from './MicrophoneButton'
-import { speakForCharacter } from '../lib/audio'
+import { speakForCharacter, ensureMediaUnlocked } from '../lib/audio'
 import { startWaitingForUser, cancelWaiting } from '../lib/conversation/turnEngine'
 import { ensureFirstLineForDisplay } from '../lib/scene/firstLineValidator'
 
@@ -29,6 +29,7 @@ export default function ChatPanel({ scene }: { scene?: Scene }) {
     if (!text) return
     setInput('')
     cancelWaiting()
+    try { await ensureMediaUnlocked() } catch {}
     
     // Optimistic update
     const userMsg: ConversationMessage = { speaker: 'User', message: text, timestamp: new Date().toISOString() }
@@ -197,6 +198,29 @@ export default function ChatPanel({ scene }: { scene?: Scene }) {
       </div>
       <div className="mt-2">
         <MicrophoneButton onText={handleMicText} />
+      </div>
+      <div className="mt-2">
+        <button
+          onClick={async () => {
+            try {
+              const r = await fetch('/api/health/voice')
+              const j = await r.json()
+              alert(`Voice Health:
+- hasAppId: ${j.hasAppId}
+- hasApiKey: ${j.hasApiKey}
+- TTS attempted: ${j.tts?.attempted}
+- TTS ok: ${j.tts?.ok}
+- TTS status: ${j.tts?.status}
+- TTS vendor: ${j.tts?.vendor ? JSON.stringify(j.tts.vendor).slice(0, 200) : '(none)'}
+`)
+            } catch (e) {
+              alert('Voice health check failed.')
+            }
+          }}
+          className="rounded-md border border-gray-700 bg-gray-900 px-3 py-1 text-xs text-gray-300 hover:bg-gray-800"
+        >
+          Voice Health Check
+        </button>
       </div>
     </div>
   )
